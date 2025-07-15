@@ -11,8 +11,24 @@ FILENAME = "booking.json"
 def load_bookings():
     if not os.path.exists(FILENAME):
         return []
+
     with open(FILENAME, "r", encoding="utf-8") as f:
-        return json.load(f)
+        bookings = json.load(f)
+
+    if bookings:
+        time_slot = bookings[0]
+        parts = time_slot.split("-")
+        if len(parts) == 2 and all(p.strip().isdigit() for p in parts):
+            start, end = map(int, parts)
+            now_hour = datetime.datetime.now().hour
+            if end <= now_hour:
+                bookings = []
+                save_bookings(bookings)
+        else:
+            bookings = []
+            save_bookings(bookings)
+
+    return bookings
 
 def save_bookings(bookings):
     with open(FILENAME, "w", encoding="utf-8") as f:
@@ -20,54 +36,68 @@ def save_bookings(bookings):
 
 def book_slot():
     bookings = load_bookings()
+    now = datetime.datetime.now()
+    current_hour = now.hour
 
-    code, time_input = d.inputbox("Введите время бронирования (например, 10-12):")
+    if bookings:
+        code = d.yesno(f"Уже есть бронь на время '{bookings[0]}'.\nХотите изменить её? Это может помешать работе стенда", width=50)
+        if code != d.OK:
+            d.msgbox("Бронирование не изменено.", width=40)
+            return
+        code, end_input = d.inputbox(f"Текущая бронь: {bookings[0]}\nВведите новое время окончания (часы, 0 для отмены):")
+        if code != d.OK:
+            return
+            
+        end_input = end_input.strip()
+        
+        if end_input == "0":
+            bookings = []
+            save_bookings(bookings)
+            d.msgbox("Бронь отменена.", width=40)
+            return
+            
+        if not end_input.isdigit():
+            d.msgbox("Неверный формат. Введите число часов.", width=50)
+            return
+            
+        end_hour = int(end_input)
+        if not (current_hour < end_hour <= 24):
+            d.msgbox(f"Введите корректное время окончания (от {current_hour + 1} до 24).", width=50)
+            return
+            
+        new_booking = f"{current_hour}-{end_hour}"
+        bookings = [new_booking]
+        save_bookings(bookings)
+        d.msgbox(f"Бронь изменена на '{new_booking}'.", width=50)
+        return
+
+    # Новая бронь
+    code, end_input = d.inputbox(f"Текущее время: {current_hour}:00\nВведите время окончания брони (часы):")
     if code != d.OK:
         d.msgbox("Бронирование отменено.", width=40)
         return
-
-    time_input = time_input.strip()
-
-    if not time_input:
-        d.msgbox("Пустой ввод недопустим.", width=40)
-        return
-
-    parts = time_input.split("-")
-    if len(parts) != 2 or not all(p.strip().isnumeric() for p in parts):
-        d.msgbox("Неверный формат. Введите часы через тире, например: 10-12", width=50)
-        return
+        
+    end_input = end_input.strip()
     
-    now_hour = datetime.datetime.now().hour
-    start, end = map(int, parts)
-    if not (0 <= start < 24 and 0 < end <= 24 and start < end and end > now_hour):
-        d.msgbox("Введите корректный диапазон часов.", width=50)
+    if not end_input.isdigit():
+        d.msgbox("Неверный формат. Введите число часов.", width=50)
         return
-    
-
-    if time_input in bookings:
-        d.msgbox(f"Время '{time_input}' уже занято. Выберите другое.", width=50)
+        
+    end_hour = int(end_input)
+    if not (current_hour < end_hour <= 24):
+        d.msgbox(f"Введите корректное время окончания (от {current_hour + 1} до 24).", width=50)
         return
-
-    bookings.append(time_input)
+        
+    new_booking = f"{current_hour}-{end_hour}"
+    bookings.append(new_booking)
     save_bookings(bookings)
-    d.msgbox(f"Время '{time_input}' забронировано.", width=50)
-
-'''def validate_booking():
-    bookings = load_bookings()
-    valid_bookings = []
-    now_hour = datetime.datetime.now().hour
-    for i in bookings:
-        parts = i.strip().split("-")
-        start, end = map(int, parts)
-        if 0 <= start < 24 and 0 < end <= 24 and start < end and end > now_hour:
-            valid_bookings.append(f"{start}-{end}")'''
-
+    d.msgbox(f"Время '{new_booking}' забронировано.", width=50)
 
 def main():
     while True:
         code, tag = d.menu("Меню:", choices=[
-            ("1", "Забронировать слот"),
-            ("2", "Показать все брони"),
+            ("1", "Забронировать/Изменить слот"),
+            ("2", "Показать текущую бронь"),
             ("3", "Выход")
         ])
         if code != d.OK or tag == "3":
@@ -77,9 +107,9 @@ def main():
         elif tag == "2":
             bookings = load_bookings()
             if bookings:
-                d.msgbox("Забронированные слоты:\n" + "\n".join(bookings), width=50)
+                d.msgbox("Текущая бронь:\n" + "\n".join(bookings), width=50)
             else:
-                d.msgbox("Нет забронированных слотов.", width=40)
+                d.msgbox("Нет активных броней.", width=40)
 
 if __name__ == "__main__":
     main()
